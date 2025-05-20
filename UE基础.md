@@ -35,11 +35,10 @@ ctrl+(0-9)设置书签,即固定摄像头位置
 
 ## 基础知识
 
-摄像头速度=视角移动速度
-
-坐标系用的是左手坐标系
-
-UE中一单位=1cm
+- 摄像头速度=视角移动速度
+- 坐标系用的是左手坐标系
+- UE中一单位=1cm
+- 头文件必须放在.generated.h前面
 
 ## Visual Studio设置
 
@@ -78,7 +77,7 @@ if (GEngine)
 
 1是键值,对应屏幕输出位置
 
-## 字符串格式化
+### 字符串格式化
 
 ```cpp
 UE_LOG(LogTemp, Warning, TEXT("DeltaTime: %.2f"), DeltaTime);
@@ -94,6 +93,8 @@ FString Message = FString::Printf(TEXT("DeltaTime: %s"), *Name);
 ```
 
 **注意**:GetName()是获取实体名字的函数,*号是将FString转换成cString的运算符
+
+## Actor
 
 - **GetWorld()**
 获取当前actor所在世界(UWorld*类型),如果没生成返回null
@@ -115,11 +116,11 @@ FString Message = FString::Printf(TEXT("DeltaTime: %s"), *Name);
 **AddActorWorldOffset()**\
 **AddActorWorldRotation()**
 
-## 调试宏
+### 调试宏
 
 ```cpp
 #pragma once
-#include "DrawDebugHelpers.h"
+#include "DrawDebugHelpers.h"//这个头文件必须有
 
 #define DRAW_SPHERE(Location) if(GetWorld()) { DrawDebugSphere(GetWorld(), Location, 50.f, 12, FColor::Red, true, -1.f); };
 #define DRAW_SPHERE_SingleFrame(Location) if(GetWorld()) { DrawDebugSphere(GetWorld(), Location, 50.f, 12, FColor::Red, false, -1.f); };
@@ -145,7 +146,7 @@ void AItem::Tick(float DeltaTime)
 }
 ```
 
-## 正弦函数产生循环
+### 正弦函数产生循环
 
 ```cpp
 void AItem::Tick(float DeltaTime)
@@ -159,7 +160,7 @@ void AItem::Tick(float DeltaTime)
 }
 ```
 
-## c++属性添加到蓝图属性栏
+### c++属性添加到蓝图属性栏
 
 ```cpp
 //只能修改默认值,在蓝图中修改
@@ -172,7 +173,7 @@ UPROPERTY(EditAnywhere)
 UPROPERTY(VisibleDefaultsOnly)
 ```
 
-## 暴露c++属性到蓝图图表中
+### 暴露c++属性到蓝图图表中
 
 要使用读写功能属性不能是私有
 Category参数改变该属性所在蓝图属性栏目名称
@@ -183,14 +184,14 @@ UPROPERTY(EditAnywhere,BlueprintReadWrite)//读写
 UPROPERTY(EditAnywhere,BlueprintReadOnly,meta=(AllowPrivateAcess = "true"))//让私有变量可以在蓝图中被访问,UE5.5似乎没有该meta功能
 ```
 
-## 暴露c++类函数到蓝图图表中
+### 暴露c++类函数到蓝图图表中
 
 ```cpp
 UFUNCTION(BlueprintCallable)//适用于修改状态的操作(如触发事件、改变变量)
 UFUNCTION(BlueprintPure)//适用于数据获取、计算、逻辑判断等无状态的操作
 ```
 
-## C++Template
+### C++Template
 
 ```cpp
 Template <typename T>
@@ -200,3 +201,69 @@ T Avg(T a,T b)
 }
 int result = <Avg<int>(1,2);
 ```
+
+### Component
+
+```cpp
+UPROPERTY(VisibleAnywhere)//参与反射回收,暴露给编辑器
+UStaticMeshComponent* ItemMesh;
+
+//工厂模式,相当于new,TEXT里面是名称
+ItemMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ItemMesh"));
+//根组件被回收,ItemMesh成为根
+RootComponent = ItemMesh;
+```
+
+实际使用一般是c++创组件,蓝图选择Mesh
+
+## Pawn
+
+### Capsule 胶囊组件
+
+**头文件:**`#include "Components/CapsuleComponent.h"`
+
+.h文件中
+
+```cpp
+private:
+UPROPERTY(VisibleAnywhere)
+UCapsuleComponent* Capsule;
+```
+
+.cpp文件中,构造函数里面
+
+```cpp
+Capsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Capsule"));
+Capsule->SetCapsuleHalfHeight(20.f);//设置长度
+Capsule->SetCapsuleRadius(15.f);//设置半径
+SetRootComponent(Capsule);//比直接赋值应对场景多
+```
+
+### Forward Declaration
+
+**定义:** 它允许你在文件的一部分声明一个类型(比如类、结构体、函数等),而不需要提供其完整的定义.这在大型项目中非常有用,可以减少头文件的相互依赖,加快编译速度.
+
+防止在头文件中引用头文件导致引入过多不必要代码\
+用法类似提前声明函数,后面实现\
+.h文件中`class UCapsuleComponent;`\
+之后便可以声明指针,在cpp文件中引用头文件
+
+### Skeletal Mesh Components
+
+骨骼网格组件
+
+```cpp
+//.h
+class USkeletalMeshComponent;
+UPROPERTY(VisibleAnywhere)
+USkeletalMeshComponent* BirdMesh;
+//.cpp
+#include "Components/SkeletalMeshComponent.h"
+ABird::ABird()
+{
+BirdMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("BirdMesh"));
+BirdMesh->SetupAttachment(GetRootComponent());//使骨骼跟根组件移动
+}
+```
+
+**增加动画:** 蓝图Animation中AnimationMode选用 Use Animation Asset可以使用动画资源
