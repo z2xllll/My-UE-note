@@ -43,10 +43,15 @@ UE中一单位=1cm
 
 ## Visual Studio设置
 
-**注意:**
+### 注意
 
 - **一定要取消热重载**
-- **取消实时编译**
+- **最好取消实时编译**
+**容易出问题的地方**
+- 改变`UPROPERTY`参数时使用热重载会崩溃
+- 改变蓝图类结构(添加成员)使用热重载可能会崩溃
+
+**解决办法:** 退出UE编辑器,在vs中编译并启动UE
 
 ## 创建蓝图类
 
@@ -110,6 +115,22 @@ FString Message = FString::Printf(TEXT("DeltaTime: %s"), *Name);
 **AddActorWorldOffset()**\
 **AddActorWorldRotation()**
 
+## 调试宏
+
+```cpp
+#pragma once
+#include "DrawDebugHelpers.h"
+
+#define DRAW_SPHERE(Location) if(GetWorld()) { DrawDebugSphere(GetWorld(), Location, 50.f, 12, FColor::Red, true, -1.f); };
+#define DRAW_SPHERE_SingleFrame(Location) if(GetWorld()) { DrawDebugSphere(GetWorld(), Location, 50.f, 12, FColor::Red, false, -1.f); };
+#define DRAW_LINE(Start, End) if(GetWorld()) { DrawDebugLine(GetWorld(), Start, End, FColor::Red, true, -1.f); };
+#define DRAW_LINE_SingleFrame(Start, End) if(GetWorld()) { DrawDebugLine(GetWorld(), Start, End, FColor::Red, false, -1.f); };
+#define DRAW_POINT(Location) if(GetWorld()) { DrawDebugPoint(GetWorld(), Location, 10.f, FColor::Red, true, -1.f); };
+#define DRAW_POINT_SingleFrame(Location) if(GetWorld()) { DrawDebugPoint(GetWorld(), Location, 10.f, FColor::Red, false, -1.f); };
+#define DRAW_VECTOR(Start,End) if(GetWorld()) { DrawDebugDirectionalArrow(GetWorld(), Start, End, 50.f, FColor::Red, true, -1.f); };
+#define DRAW_VECTOR_SingleFrame(Start,End) if(GetWorld()) { DrawDebugDirectionalArrow(GetWorld(), Start, End, 50.f, FColor::Red, false, -1.f); };
+```
+
 ```cpp
 void AItem::Tick(float DeltaTime)
 {
@@ -138,14 +159,44 @@ void AItem::Tick(float DeltaTime)
 }
 ```
 
-## c++属性添加到蓝图
+## c++属性添加到蓝图属性栏
 
 ```cpp
 //只能修改默认值,在蓝图中修改
-UPROPERTY(EditDefaultOnly)
-在想要设置的属性上一行加
+UPROPERTY(EditDefaultsOnly)
 //能修改单个实例属性
 UPROPERTY(EditInstanceOnly)
 //两边都能修改
 UPROPERTY(EditAnywhere)
+//只能查看不能修改 
+UPROPERTY(VisibleDefaultsOnly)
+```
+
+## 暴露c++属性到蓝图图表中
+
+要使用读写功能属性不能是私有
+Category参数改变该属性所在蓝图属性栏目名称
+
+```cpp
+UPROPERTY(EditAnywhere,BlueprintReadOnly,Category="name")//只读
+UPROPERTY(EditAnywhere,BlueprintReadWrite)//读写
+UPROPERTY(EditAnywhere,BlueprintReadOnly,meta=(AllowPrivateAcess = "true"))//让私有变量可以在蓝图中被访问,UE5.5似乎没有该meta功能
+```
+
+## 暴露c++类函数到蓝图图表中
+
+```cpp
+UFUNCTION(BlueprintCallable)//适用于修改状态的操作(如触发事件、改变变量)
+UFUNCTION(BlueprintPure)//适用于数据获取、计算、逻辑判断等无状态的操作
+```
+
+## C++Template
+
+```cpp
+Template <typename T>
+T Avg(T a,T b)
+{
+    return (a+b)>>1;
+}
+int result = <Avg<int>(1,2);
 ```
