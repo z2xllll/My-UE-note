@@ -6,7 +6,7 @@
 
 E 上升 C 下降\
 shift f1 退出游戏不中断\
-shift ESC 退出游戏\
+shift ESC 退出游戏
 
 ### 编辑器
 
@@ -267,3 +267,102 @@ BirdMesh->SetupAttachment(GetRootComponent());//使骨骼跟根组件移动
 ```
 
 **增加动画:** 蓝图Animation中AnimationMode选用 Use Animation Asset可以使用动画资源
+
+### 前后移动
+
+UE编辑器里:Edit->Project Settings->Input->AxisMappings
+
+```cpp
+//.h
+void MoveForward(float Value);//要重写
+
+//.cpp
+void ABird::MoveForward(float Value)
+{
+    if (Controller && Value != 0.f)
+    {
+        FVector Forward = GetActorForwardVector();
+        AddMovementInput(Forward, Value);
+    }
+}
+
+void ABird::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+    Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+    PlayerInputComponent->BindAxis(FName("MoveForward"), this, &ABird::MoveForward);
+}
+```
+
+### Camera And Spring Arm
+
+**蓝图中:** 添加spring arm组件和camera组件,并将camera组件拖到arm上
+
+```cpp
+//.h
+//先声明
+class USpringArmComponent;
+class UCameraComponent;
+
+UPROPERTY(VisibleAnywhere)
+USpringArmComponent* SpringArm;
+
+UPROPERTY(VisibleAnywhere)
+UCameraComponent* ViewCamera;
+
+//.cpp
+#include "GameFramework/SpringArmComponent.h"
+#include "Camera/CameraComponent.h"
+
+Bird::ABird()
+{
+    PrimaryActorTick.bCanEverTick = true;
+    SpringArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("SpringArm"));
+    SpringArm->SetupAttachment(GetRootComponent());
+    SpringArm->TargetArmLength = 300.f;
+
+    ViewCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("ViewCamera"));
+    ViewCamera->SetupAttachment(SpringArm);
+
+    AutoPossessPlayer = EAutoReceiveInput::Player0;
+}
+```
+
+### Add Controller Input
+
+**内容:** 用鼠标控制控制器的角度
+
+Edit->Project Settings->Input->Axis Mappings中,鼠标x,y,对应鼠标
+左右移动速度,前后移动速度,同时要使得控制器同步变化需再Pawn蓝图中勾选`Use Controller Rotation xxx`
+
+c++
+```cpp
+//.h
+void Turn(float Value);
+void LookUp(float Value);
+
+//.cpp
+void ABird::Turn(float Value)
+{
+	AddControllerYawInput(Value);//更改yaw
+}
+
+void ABird::LookUp(float Value)
+{
+	AddControllerPitchInput(Value);//更改pitch
+}
+
+void ABird::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+
+	PlayerInputComponent->BindAxis(FName("Turn"), this, &ABird::Turn);//吸附
+	PlayerInputComponent->BindAxis(FName("LookUp"), this, &ABird::LookUp);
+}
+```
+
+### 游戏模式
+一般情况下游戏用的是默认模式,也就是说会有默认Pawn出现,要想改默认模式
+就需要创建一个`game mode base`类,修改后将游戏模式指定为该模式就行\
+**坏处:** 在大世界中,如果你拖入的你设定的pawn实例进入另一个区域后,
+会导致pawn消失,除非你回到原来区域
