@@ -366,3 +366,85 @@ void ABird::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 就需要创建一个`game mode base`类,修改后将游戏模式指定为该模式就行\
 **坏处:** 在大世界中,如果你拖入的你设定的pawn实例进入另一个区域后,
 会导致pawn消失,除非你回到原来区域
+- 如果是全项目范围,修改 Project Settings > Maps & Modes 的 Default Pawn Class.
+- 如果是单个关卡范围,修改 World Settings > Game Mode Override.
+- 如果是运行时动态切换,使用蓝图或 C++ 实现.
+
+## Character
+角色默认拥有网格和骨骼
+
+取消`Use Controller Rotation x,y,x`
+```cpp
+bUseControllerRotationPitch = false;
+bUseControllerRotationYaw = false;
+bUseControllerRotationRoll = false;
+```
+
+不取消会使角色和镜头一起移动、
+**旋转弹簧臂而不使角色旋转:** `Use Pawn Controller Rotation`\
+右移
+```cpp
+void ASlashCharacter::MoveRight(float Value)
+{
+	if (Controller && Value != 0.f)
+	{
+		FVector Right = GetActorRightVector();
+		AddMovementInput(Right, Value);
+	}
+}
+```
+
+了解旋转矩阵概念
+
+### Controller Directions
+控制器方向同步
+```cpp
+void ASlashCharacter::MoveForward(float Value)
+{
+	if (Controller && Value != 0.f)
+	{
+		// find out which way is forward
+		const FRotator ControllerRotation = GetControlRotation();//得到控制器方向
+		const FRotator YawRotation(0.f, ControllerRotation.Yaw, 0.f);//得到单个方向
+
+		const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);//转换成Vector,向右移动改成EAxis::Y即可
+		AddMovementInput(Direction, Value);
+	}
+}
+```
+同步角色朝向和控制器方向
+```cpp
+#include "GameFramework/CharacterMovementComponent.h"
+ASlashCharacter::ASlashCharacter()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	GetCharacterMovement()->bOrientRotationToMovement = true;//使角色朝向跟随移动方向改变
+	GetCharacterMovement()->RotationRate = FRotator(0.f, 400.f, 0.f);//改变旋转速度
+
+}
+```
+
+### Hair And Eyebrows
+添加头发和眉毛到角色\
+**添加前:** 在Slash.Build.cs文件中,添加`"HairStrandsCore"`在
+`PublicDependencyModuleNames.AddRange`中\
+生成文件(可删除)
+- Binaries
+- Intermediate
+- Saved
+
+每次往构建文件中添加东西,最好删掉这些再重新编译\删除后右键点击`Slash.uproject`生成解决方案,然后双击打开该项目重建模块游戏打开后关闭ue5用vs重新编译\
+更改头发颜色(更改材质)
+
+## Animation
+
+1. 先创建动画蓝图(`Animation`->`AnimationBP`->选择骨架)
+2. 打开蓝图编辑器,进入`Mesh`视图,切换`Animation Mode`->`Use Animation Blueprint`->选择刚创建的动画蓝图
+3. 添加对象变量类型'BP Slash Character`
+4. 添加`Event Blueprint Initialize Animation`事件,将`Try Get Pawn Owner`连到`Cast To BP_SlashCharacter`上进行转换后连到`Set Character`上,再连到`Get Character Movement`上面,创建`Character Movement Component`类型变量,最后连到`Set MovementComponent`变量上,Set相当于给变量赋值
+5. ps:没找到`Get Character Movement`是因为开了`Context Sensitive`
+6. ![图示](./Image/image1.png)//漏连set了
+7. ![获取速度](./Image/image.png)
+8. 7将Event update连到set
+
+然后建立状态机,建立状态,加入状态动画,加入转换规则,动画记得选中循环播放
