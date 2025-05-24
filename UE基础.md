@@ -448,3 +448,161 @@ ASlashCharacter::ASlashCharacter()
 8. 7将Event update连到set
 
 然后建立状态机,建立状态,加入状态动画,加入转换规则,动画记得选中循环播放
+
+### Anim Instance
+
+父类改为 Anim Instance\
+编译任何动画实例修改前先关闭编辑器,蓝图中的update函数是一直运行的,会影响c++,出现终端删除缓存文件删除`.vs`,`sln`,启动ue5后重新打开解决方案,关闭ue5再强制编译`(ctrl+f5)`
+
+```cpp
+//.h
+#pragma once
+
+#include "CoreMinimal.h"
+#include "Animation/AnimInstance.h"
+#include "SlashAnimInstance.generated.h"
+
+/**
+ * 
+ */
+UCLASS()
+class SLASH_API USlashAnimInstance : public UAnimInstance
+{
+	GENERATED_BODY()
+
+public:
+	virtual void NativeInitializeAnimation() override;
+	virtual void NativeUpdateAnimation(float DeltaTime) override;
+	
+	UPROPERTY(BlueprintReadOnly)
+	class ASlashCharacter* SlashCharacter;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	class UCharacterMovementComponent* SlashCharacterMovement;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Movement")
+	float GroundSpeed;
+};
+```
+
+```cpp
+//.cpp
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Characters/SlashAnimInstance.h"
+#include "Characters/SlashCharacter.h"
+#include "GameFramework/CharacterMovementComponent.h"
+#include "Kismet/KismetMathLibrary.h"
+
+void USlashAnimInstance::NativeInitializeAnimation()
+{
+	Super::NativeInitializeAnimation();
+
+	SlashCharacter = Cast<ASlashCharacter>(TryGetPawnOwner());//类型转换
+	if (SlashCharacter)
+	{
+		SlashCharacterMovement = SlashCharacter->GetCharacterMovement();//获取移动组件
+	}
+}
+
+void USlashAnimInstance::NativeUpdateAnimation(float DeltaTime)
+{
+	Super::NativeUpdateAnimation(DeltaTime);
+
+	if (SlashCharacterMovement)
+	{
+		GroundSpeed = UKismetMathLibrary::VSizeXY(SlashCharacterMovement->Velocity);//获取速度
+	}
+}
+```
+
+### Jump
+使用`Action Mappings`,适用于单次操作触发的动作,同时会生成一个 `Jump`蓝图时间类属`Action Event`\
+**蓝图:** 直接在角色蓝图中将`Jump`函数连接到内置的`Character::Jump`函数上\
+**c++:**`SlashCharacter`中绑定`Jump`函数,用系统自带函数获取IsFalling变量信息,将移动的状态机存在缓存中,在创建主状态机包含地面状态和空中状态.
+
+### Inverse Kinematics
+解决上楼梯脚步悬空问题\
+先创建一个`Animation`的Controll Rig,在`Forward Slove Graph`导入相应角色`Mesh`,在里面创建函数`IKFootTrace`,![alt text](image.png)
+不会碰到Bone可能是因为以本身做碰撞检测
+![alt text](image-1.png)
+![alt text](image-2.png)
+![alt text](image-3.png)
+![alt text](image-4.png)
+最低点是离地最近的\
+将`ShouldDoIKTrace`设为全局可看
+![alt text](image-5.png)
+![alt text](image-7.png)
+`settings`那里改成`pin to input`
+![alt text](image-6.png)
+微调需要在`FootTrace`函数里面调增碰撞检测起点和终点\
+**脚掌贴地面**未实现
+
+## Section 9
+
+### Collision Presets
+1. 拖动网格体进世界会自动生成`Actor`类,默认带网格体组件,网格体组件里面有`Collision Presets`选项
+- `No Collsion`有碰撞
+- `Query`仅可以进行空间查询,上一节检测脚到地面距离,属于简单碰撞,可阻挡
+- `Physic`无碰撞
+- `Enable`两者都发生
+
+### Collision Responses
+对各种对象的碰撞反应
+
+### OverlapEvents
+重叠事件
+`On Component Begin Overlap`某个物体发生重叠时发生的事件
+![alt text](image-8.png)
+
+### On Component Begin Overlap
+1. 解决方案中搜素`PrimitiveComponent.h`文件中找到对应委托的参数列表
+2.  声明函数
+3.  绑定函数
+```cpp
+//Item.h
+class USphereComponent;
+UPROPERTY(VisibleAnywhere)
+USphereComponent* Sphere;
+
+//Item.cpp
+#include "Components/SphereComponent.h"
+
+AItem::AItem()
+{
+	rimaryActorTick.bCanEverTick = true;
+	Sphere = CreateDefaultSubobject<USphereComponent>(TEXT("Shere"));
+	Sphere->SetupAttachment(GetRootComponent());
+
+}
+
+void AItem::BeginPlay()
+{
+	Super::BeginPlay();
+
+	//绑定回调函数到委托
+	Sphere->OnComponentBeginOverlap.AddDynamic(this, &AItem::OnSphereOverlap);
+}
+
+void AItem::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	const FString OtherActorName = OtherActor->GetName();
+	if (GEngine)
+	{
+		//打印名字在屏幕上
+		GEngine->AddOnScreenDebugMessage(1, 30.f, FColor::Red, OtherActorName);
+	}
+}
+```
+`End`同理
+
+## Weapon
+
+### The Weapon Class
+
+`Weapon`继承`Item`,继承的函数必须是虚函数,且重载的
+函数不能加`UFUNCTION`
+
+### Sockets
+插槽,找到骨骼,找到手右键`add socket`添加插槽,可以预览加上武器动画,和动作
