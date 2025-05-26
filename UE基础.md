@@ -606,3 +606,93 @@ void AItem::OnSphereOverlap(UPrimitiveComponent* OverlappedComponent, AActor* Ot
 
 ### Sockets
 插槽,找到骨骼,找到手右键`add socket`添加插槽,可以预览加上武器动画,和动作
+
+### Mixamo
+一个获取动画资源网站,分为角色和动画,角色页面可以获取网格体,又有`mixamo`的网格体才能用对应动画,下载对应动画后可以在游戏内导入,导入动画时要选择SK即骨骼,是`mixamo`里下的,
+
+### IK Rig
+将一个骨架动画转移另一个`Retargeting`,需要用到`IK Rig`, 动画->重定向->IK绑定,右键`Animation->IK Rig->选择IK mesh`,`retarget root`反向目标根节点是绑定其他所有骨骼的参考框架,右键骨骼`Set`,`chain`为骨骼链,
+![alt text](image-9.png)
+再给想要转移动画的角色重复该操作,同样要创建IK,需要与`Maxamo IK`绑定中创建的链条对应的链条,只有一个骨骼的链叫做根,`retarget root`位置和`mixamo`骨骼位置一致,`root chain`是最上面的骨骼,链名字要一样,`twist`骨骼会打断`chain`,手动修改起点和终点
+
+### IK Retargeter
+重定向动画到角色
+1. 在`Rigs`里面创建`Retargeter`
+2. 点击进去设置`target`为想要转移到的角色上面
+3. 如果角色初始姿势不对,左上角`Auto Align`自动对齐动作
+4. 导出重定向动画到一个文件夹,以后角色就可以用里面的动画了
+
+### Attaching the Sword
+捡起武器,蓝图:
+![alt text](image-10.png)
+```cpp
+#include "Characters/SlashCharacter.h"
+void AWeapon::OnSphereBeginOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{	
+	Super::OnSphereBeginOverlap(OverlappedComponent, OtherActor, OtherComp, OtherBodyIndex, bFromSweep, SweepResult);
+
+	ASlashCharacter* SlashCharacter = Cast<ASlashCharacter>(OtherActor);
+	if (SlashCharacter)
+	{
+		FAttachmentTransformRules FATR(EAttachmentRule::SnapToTarget, true);
+		ItemMesh->AttachToComponent(SlashCharacter->GetMesh(), FATR, FName("RightHandSocket"));
+	}
+}
+```
+
+### Picking Up Items
+
+**捡起物体,思路:** 在`SlashCharacter`中创建一个变量存储重叠的物体类型,
+在.h文件中创建一个`Set`函数设置类型,在重叠开始后设置对应类型,结束后设置为
+空,每次按e判断变量属于哪个类型,执行相应操作
+
+```cpp
+void AWeapon::Equip(USceneComponent* InParent, FName InSocketName)
+{
+	FAttachmentTransformRules FATR(EAttachmentRule::SnapToTarget, true);
+	//吸附对象,枚举类型,插槽名称
+	ItemMesh->AttachToComponent(InParent, FATR, InSocketName);
+}
+
+//强制内联
+FORCEINLINE void SetOverlappingItem(AItem* Item) { OverlappingItem = Item; }
+```
+
+### Enum for Character State
+枚举角色状态
+`enum class`作用域枚举 
+单独放在一个头文件里面,减少耦合度同时避免头文件不必要的引入,\
+`SlashInstance.h 和 SlashCharacter.h`中需要引入,同时在关键\
+动作发生时更新对应状态,UE枚举类型的命名规范
+```cpp
+UENUM(BlueprintType)//在蓝图中当类型使用
+enum class ECharacterState : uint8//8位无符号整型
+{
+	ECS_Unequipped UMETA(DisplayName = "Unequipped"),//更改在蓝图中名称
+	ECS_EquippedOneHandedWeapon UMETA(DisplayName = "Equipped One-Handed Weapon"),
+	ECS_EquippedTwoHandedWeapon UMETA(DisplayName = "Equipped Two-Handed Weapon")
+};
+```
+
+### Switch Animation Poses
+
+![alt text](image-11.png)
+
+### Equiped Animations
+`mixamo`带移动的动画要想保持原地移动需要勾选`in place`选项 
+`controll rig`导致的下半身不动的问题未解决
+
+### Multiple Animation Blueprints
+使用多个动画蓝图处理不同内容.
+1. 创建新动画蓝图,复制部分原蓝图过去
+2. `tips:`复制过来的蓝图可能还有某些未声明的变量,\
+此时可以通过编译查错快速定位未声明变量位置,\
+然后右键变量快速创建变量
+3. 一个蓝图链接到另一个蓝图
+4. ![](image-12.png)
+`Linked Anim Graph`
+5. 绑定两者之间相同变量
+6. ![alt text](image-13.png)
+7. 传入缓存动画,`Input Pose`
+8. ![alt text](image-14.png)
+9. ![alt text](image-15.png)
