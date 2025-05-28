@@ -680,7 +680,8 @@ enum class ECharacterState : uint8//8位无符号整型
 
 ### Equiped Animations
 `mixamo`带移动的动画要想保持原地移动需要勾选`in place`选项 
-`controll rig`导致的下半身不动的问题未解决
+`controll rig`导致的下半身不动的问题未解决(已解决,\
+忘记开启动画循环了)
 
 ### Multiple Animation Blueprints
 使用多个动画蓝图处理不同内容.
@@ -696,3 +697,76 @@ enum class ECharacterState : uint8//8位无符号整型
 7. 传入缓存动画,`Input Pose`
 8. ![alt text](image-14.png)
 9. ![alt text](image-15.png)
+
+## Montage
+
+### Animation Montages
+
+先创建`Animation Montages`,然后在里面添加动画,
+蓝图:
+![alt text](image-16.png)
+```cpp
+
+#include "Animation/AnimMontage.h"
+void ASlashCharacter::Attack()
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance)
+	{
+		AnimInstance->Montage_Play(AttackMontage);
+		int32 Selection = FMath::RandRange(1, 2);
+		FName SectionName;
+		switch (Selection)
+		{
+		case 1:
+			SectionName = "Attack1";
+			break;
+		case 2:
+			SectionName = "Attack2";
+		default:
+			break;
+		}
+		AnimInstance->Montage_JumpToSection(SectionName,AttackMontage);
+	}
+
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+UAnimMontage* AttackMontage;
+}
+记得给蓝图中的`AttackMontage`赋值.
+```
+
+### Animation Notifies
+
+在`Notify`那一栏右键可以创建,
+要在蓝图中访问枚举量必须在枚举类型前加`UENUM(BlueprintType)`
+![alt text](image-17.png)
+修改成只有在装备武器时能发起攻击
+
+### Item State
+
+给物体添加状态
+```cpp
+if (ActionState == EActionState::EAS_Attacking)return;
+```
+禁止移动攻击
+
+### Audio
+
+添加声音,在蒙太奇里添加特殊通知播放声音,点击\
+通知选择声音导入,想要调大声音可以更改资产属性`Volume`,\
+`pich`是声调,想要不改变资产更改声音属性,添加`Sound Cue`,
+![alt text](image-18.png)
+虚幻5新增`Metasounds`
+![alt text](image-19.png)
+声音数组,未做用力攻击声音
+![alt text](image-20.png)
+同样可以在通知里面加入`niagara`粒子特效
+![alt text](image-21.png)
+`foot_l`是粒子生成的地方
+
+### Fix Foot Placement
+解决罗圈腿问题(原因不明)
+![alt text](image-22.png)
+
+### Putting the Sword Away
+装备与卸下武器,寻找动画,制作蒙太奇,导入动画,设置`SectionName`,设置相应变量,实施相应动画,在`BP_SlashCharacter`里面设置蒙太奇,
