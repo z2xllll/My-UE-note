@@ -39,6 +39,8 @@ ctrl+(0-9)设置书签,即固定摄像头位置
 - 坐标系用的是左手坐标系
 - UE中一单位=1cm
 - 头文件必须放在.generated.h前面
+- 命令行`show collison`查看碰撞体
+- `slomo+float`放缓时间到float倍
 
 ## Visual Studio设置
 
@@ -769,4 +771,146 @@ if (ActionState == EActionState::EAS_Attacking)return;
 ![alt text](image-22.png)
 
 ### Putting the Sword Away
-装备与卸下武器,寻找动画,制作蒙太奇,导入动画,设置`SectionName`,设置相应变量,实施相应动画,在`BP_SlashCharacter`里面设置蒙太奇,
+装备与卸下武器,寻找动画,制作蒙太奇,导入动画,设置`SectionName`,设置相应变量,实施相应动画,在`BP_SlashCharacter`里面设置蒙太奇,注意置空`OverlappingItem`
+
+### Attaching the Sword to Back
+1. 在背部某个骨骼上建立插槽
+2. 边调整插槽位置边对比动画
+3. 在`EquipMontage`添加合适的通知点
+4. 在c++中完成转换插槽的函数
+5. 在`ABP_SlashCharacter`事件中实现调用
+
+### Equip Sounds
+
+捡起金属声音
+![alt text](image-23.png)
+
+设置碰撞预设
+```cpp
+	if (Sphere)
+	{
+		Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+```
+
+c++添加声音
+```cpp
+//weapon.h
+UPROPERTY(EditAnywhere, Category = "Weapon Properties")
+USoundBase* EquipSound = nullptr;
+//weapon.cpp
+#include "Kismet/GameplayStatics.h"
+void AWeapon::Equip(USceneComponent* InParent, FName InSocketName)
+{
+	ItemState = EItemState::EIS_Equipped;
+	AttachMeshToSocket(InParent, InSocketName);
+	if (EquipSound)
+	{
+		UGameplayStatics::PlaySoundAtLocation(this, EquipSound, GetActorLocation());
+	}
+	if (Sphere)
+	{
+		Sphere->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+}
+```
+
+### Edit Animation
+修改动画\
+在动画里选中骨骼后点击+key修改关键帧
+![alt text](image-24.png)
+
+保存修改的动画
+![alt text](image-25.png)
+
+## 处理武器碰撞
+
+### Trace
+追踪技术,`On component Begin Overlap`需要右键对应组件添加
+蓝图:
+![alt text](image-26.png)
+如果有一个角色既有网格体又有胶囊会出bug,只和胶囊发生重叠,将`Object Type`改为 `World Dynamic`,同时开启`Generate Overlapping`,`Visibility`开启,`Weapon`设置ignore`pawn`类型防止和胶囊触发重叠事件
+```cpp
+//Weapon.h
+class UBoxComponent;
+
+public:
+	AWeapon();
+
+protected:
+	virtual void BeginPlay() override;
+
+UFUNCTION()
+void OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult);
+
+	UPROPERTY(VisibleAnywhere, Category = "Weapon Properties")
+	UBoxComponent* WeaponBox = nullptr;
+
+	UPROPERTY(VisibleAnywhere)
+	USceneComponent* BoxTraceStart = nullptr;
+
+	UPROPERTY(VisibleAnywhere)
+	USceneComponent* BoxTraceEnd = nullptr;
+
+//Weapon.cpp
+AWeapon::AWeapon()
+{
+	WeaponBox = CreateDefaultSubobject<UBoxComponent>(TEXT("WeaponBox"));
+	WeaponBox->SetupAttachment(GetRootComponent());
+	WeaponBox->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	//设置对全部通道的碰撞响应为重叠
+	WeaponBox->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Overlap);
+	//设置对玩家的碰撞响应为无视
+	WeaponBox->SetCollisionResponseToChannel(ECollisionChannel::ECC_Pawn, ECollisionResponse::ECR_Ignore);
+
+	BoxTraceStart = CreateDefaultSubobject<USceneComponent>(TEXT("Box Trace Start"));
+	BoxTraceStart->SetupAttachment(GetRootComponent());
+	BoxTraceEnd = CreateDefaultSubobject<USceneComponent>(TEXT("Box Trace End"));
+	BoxTraceEnd->SetupAttachment(GetRootComponent());
+}
+
+void AWeapon::BeginPlay()
+{
+	Super::BeginPlay();
+
+	WeaponBox->OnComponentBeginOverlap.AddDynamic(this, &AWeapon::OnBoxOverlap);
+}
+
+void AWeapon::OnBoxOverlap(UPrimitiveComponent* OverlappedComponent, AActor* OtherActor, UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
+{
+	const FVector Start = BoxTraceStart->GetComponentLocation();
+	const FVector End = BoxTraceEnd->GetComponentLocation();
+	TArray<AActor*> ActorsToIgnore;
+	ActorsToIgnore.Add(this);
+	FHitResult BoxHit;
+	UKismetSystemLibrary::BoxTraceSingle(
+		this,
+		Start,
+		End,
+		FVector(5.f, 5.f, 5.f), //	Box Extent
+		BoxTraceStart->GetComponentRotation(), //	Orientation
+		ETraceTypeQuery::TraceTypeQuery1, //	Trace Type
+		false, //	Trace Complex
+		ActorsToIgnore, //	Actors to Ignore
+		EDrawDebugTrace::ForDuration, //	Debug Type
+		BoxHit, //	Out Hit Result
+		true //	IbIgnoreSelf
+		);
+}
+```
+
+### interface 
+被碰撞对象要触发某种事件时用接口,接口只包含函数声明,而不实现函数
+```cpp
+/**
+ * 在这里写入想要当作接口的函数.
+ */
+class SLASH_API IHitInterface
+{
+	GENERATED_BODY()
+
+	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
+public:
+	virtual void GetHit() = 0;
+};
+```
