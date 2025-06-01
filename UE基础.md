@@ -914,3 +914,145 @@ public:
 	virtual void GetHit() = 0;
 };
 ```
+
+```cpp
+#include "Components/SkeletalMeshComponent.h"
+#include "Components/CapsuleComponent.h"
+
+AEnemy::AEnemy()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	GetMesh()->SetCollisionObjectType(ECC_WorldDynamic);
+	GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+	//敌人遮挡相机
+	GetMesh()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	//产生重叠事件
+	GetMesh()->SetGenerateOverlapEvents(true);
+	//胶囊遮挡相机
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+}
+```
+
+### Root Motion Animation
+根运动只有在角色骨骼有`root`的情况下使用,但可以通过`Blender`和`Mixamo Converter`插件来给他们加根骨头\
+只要从`mixamo`下载的同一个角色的动画里有一个带皮肤,皮肤带网格,其他都可以不带\
+`Blender`是一个网格编辑软件,装好插件后可以将无根骨骼动画转换成有根骨骼动画
+![alt text](image-27.png)
+选项根据这个来\
+把原来的骨骼删除,导入带皮肤的动画导入什么选项都不改,然后就会获得没有材质的骨骼网格体\
+然后再骨骼网格体里面找到`Assets`切换材质,右下方\
+导入动画时不需要再导入网格了,勾选`Only Animation`
+
+### Enemy类继承接口
+
+继承时必须引用对应的接口类头文件
+`Enemy`类实现`GetHit`方法,`Weapon`类触发重叠事件后转换成接口类,然后调用对应的`GetHit`函数
+
+### Hit React Montage
+
+前置:要确保该动画是根运动,进入对应动画,在`Asset Details`里面选择`Enable root montion`\
+1. 创建蒙太奇,添加动画片段
+2. 添加动画蓝图![alt text](image-28.png)
+3. 给角色使用该动画蓝图
+4. 给`Enemy.h`添加蒙太奇变量,并暴露给蓝图
+5. 实现调用蒙太奇的函数
+6. 在蓝图里为蒙太奇变量选择对应蒙太奇.
+
+### 点积(Dot Product)
+
+![alt text](image-29.png)
+
+### 叉积(Cross Product)
+![alt text](image-31.png)
+
+### 检测受击方向
+
+```cpp
+void AEnemy::GetHit(const FVector& ImpactPoint)
+{
+	DRAW_IMPACTPOINT_SPHERE(ImpactPoint);
+
+	const FVector Forward = GetActorForwardVector();
+	//Lower ImpactPoint to the Enemy's location to avoid the height difference
+	const FVector ImpactLowered(ImpactPoint.X, ImpactPoint.Y, GetActorLocation().Z);
+	const FVector ToHit = (ImpactLowered - GetActorLocation()).GetSafeNormal();
+
+	// Forward * ToHit = |Forward| * |ToHit| * cos(Theta)
+	// Forward = 1, ToHit = 1, cos(Angle) = Forward * ToHit
+	const double CosTheta = FVector::DotProduct(Forward, ToHit);
+	double Theta = FMath::Acos(CosTheta);
+	//convert to degrees
+	Theta = FMath::RadiansToDegrees(Theta);
+	
+	// If the cross product is negative, the angle is negative
+	//反余弦总是返回正值, 点积是可正可负的
+	const FVector CrossProduct = FVector::CrossProduct(Forward, ToHit);
+	if (CrossProduct.Z < 0.0f)
+	{
+		Theta = -Theta;
+	}
+
+	FName Section("FromBack");
+	if(Theta>=-45.0f && Theta <= 45.0f)
+	{
+		Section = FName("FromFront");
+	}
+	else if(Theta > 45.0f && Theta <= 135.0f)
+	{
+		Section = FName("FromRight");
+	}
+	else if(Theta < -45.0f && Theta >= -135.0f)
+	{
+		Section = FName("FromLeft");
+	}
+
+	PlayHitReactMontage(Section);
+}
+
+void AEnemy::PlayHitReactMontage(const FName& SectionName)
+{
+	UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+	if (AnimInstance && HitReactMontage)
+	{
+		//该函数第二个参数浮点数可以调整动画播放速率
+		AnimInstance->Montage_Play(HitReactMontage);
+		AnimInstance->Montage_JumpToSection(SectionName, HitReactMontage);
+	}
+}
+```
+
+![alt text](image-30.png)
+
+### 处理一次攻击多次受击问题
+增加一个公有忽视对象数组,每攻击一个添加一个到数组中,在攻击结束后清空数组
+
+### 声音衰减
+### Hit Particles
+撞击粒子
+![alt text](image-32.png)
+将文件夹导入编辑器可以直接导入`Content`目录下面
+
+```cpp
+//Enemy.h
+	
+//创建粒子变量,同时暴露给蓝图使每个实例可以选择不同的受击特效
+UPROPERTY(EditAnywhere, Category = "VisualEffects")
+	UParticleSystem* HitParticles;
+
+//.cpp
+if (HitParticles)
+{
+	UGameplayStatics::SpawnEmitterAtLocation(
+		this,
+		HitParticles,
+		ImpactPoint
+	);
+}
+```
+
+### Weapon Trails
+
+找到粒子特效后加到蒙太奇里的通知(`Add Notify State`)里面,拖动通知涵盖动时间点,然后右侧详情里面选择`PSTemplate`,然后选择起始和末端两个插槽点作为特效产生的地方,预览不显示特效,脚底特效不明原因产生
+
+## Destructible Meshes
+
