@@ -1052,7 +1052,240 @@ if (HitParticles)
 
 ### Weapon Trails
 
-找到粒子特效后加到蒙太奇里的通知(`Add Notify State`)里面,拖动通知涵盖动时间点,然后右侧详情里面选择`PSTemplate`,然后选择起始和末端两个插槽点作为特效产生的地方,预览不显示特效,脚底特效不明原因产生
+找到粒子特效后加到蒙太奇里的通知(`Add Notify State`)里面,拖动通知涵盖动时间点,然后右侧详情里面选择`PSTemplate`,然后选择起始和末端两个插槽点作为特效产生的地方,预览不显示特效,脚底特效不明原因产生\
+
+已解决:特效绑定了根部特效
 
 ## Destructible Meshes
+
+### 添加到几何集合
+
+切换到`Fracture`模式,选中物体new添加到几何文件夹,选择裂开函数,点击裂开,调整
+Damage Threshold 数组中的每个元素对应一个破碎层级:
+
+Index 0:最外层/最大的集群
+Index 1:第二层集群
+Index 2:第三层集群
+可以让物体破碎效果更明显
+
+### Field System Actors
+
+```cpp
+//weapon.h
+	
+	//只需要知道在哪调用该函数
+UFUNCTION(BlueprintImplementableEvent)
+	void CreateFields(const FVector& FieldLocation);
+
+//weapon.h
+if (BoxHit.GetActor())
+{
+	IHitInterface* HitInterface = Cast<IHitInterface>(BoxHit.GetActor());
+	if(HitInterface)
+	{
+		HitInterface->GetHit(BoxHit.ImpactPoint);
+	}
+	//只添加一次
+	IgnoreActors.AddUnique(BoxHit.GetActor());
+
+//在撞击点调用
+	CreateFields(BoxHit.ImpactPoint);
+}
+
+```
+
+给几何体选中`generate overlap events`,
+![alt text](image-33.png)`implicit type`改成box,更容易获取击中事件,
+足够的力让物体破碎,足够的线性离让物体碎片乱飞,与重力有关\
+外观,搜索`bone`,取消勾选`show bone colors`.\
+`FieldSystemMetaDataFilter`的`Field -> Object Type`设为`Destruction`.\
+![alt text](image-34.png)
+
+### Breakable Actor
+
+在`Slash.Build.cs`中加入`GeometryCollectionEngine`到`PublicDependencyModuleNames.AddRange`中\
+```cpp
+//Breakable.h
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Actor.h"
+#include "Interfaces/HitInterface.h"
+#include "BreakableActor.generated.h"
+
+class UGometryCollectionComponent;
+
+UCLASS()
+class SLASH_API ABreakableActor : public AActor, public IHitInterface
+{
+	GENERATED_BODY()
+	
+public:	
+	ABreakableActor();
+
+	virtual void GetHit(const FVector& ImpactPoint) override;
+
+protected:
+	virtual void BeginPlay() override;
+
+public:	
+	virtual void Tick(float DeltaTime) override;
+
+private:
+	UPROPERTY(VisibleAnywhere)
+	// The Geometry Collection Component that will handle the breakable geometry
+	UGeometryCollectionComponent* GeometryCollection;
+
+};
+
+//.cpp
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "Breakable/BreakableActor.h"
+#include "GeometryCollection/GeometryCollectionComponent.h"
+
+ABreakableActor::ABreakableActor()
+{
+	//Dont tick by default
+	PrimaryActorTick.bCanEverTick = false;
+
+	//Create the geometry collision component
+	GeometryCollection = CreateDefaultSubobject<UGeometryCollectionComponent>(TEXT("GeometryCollectionComponent"));
+	//Set the geometry collision component as the root component
+	SetRootComponent(GeometryCollection);
+	//允许重叠事件
+	GeometryCollection->SetGenerateOverlapEvents(true);
+	//忽视相机
+	GeometryCollection->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+}
+
+void ABreakableActor::BeginPlay()
+{
+	Super::BeginPlay();
+	
+}
+
+void ABreakableActor::Tick(float DeltaTime)
+{
+	Super::Tick(DeltaTime);
+
+}
+void ABreakableActor::GetHit(const FVector& ImpactPoint)
+{
+
+}
+
+```
+
+### Blueprint Native Event
+
+是某个函数可以同时在蓝图中重写和c++中重写\
+修改接口定义 
+```cpp
+UFUNCTION(BlueprintNativeEvent)
+//一旦设置成 BlueprintNativeEvent,不能把函数设置成vitual了
+void GetHit(const FVector& ImpactPoint);
+```
+
+然后函数在c++变成了`xx_Implementation`,c++中其他用到该函数的地方要改成该名字\
+修改后的调用
+
+```cpp
+if (BoxHit.GetActor())
+{
+	IHitInterface* HitInterface = Cast<IHitInterface>(BoxHit.GetActor());
+	if(HitInterface)
+	{
+		//原来
+		//HitInterface->GetHit(BoxHit.ImpactPoint);
+		HitInterface->Execute_GetHit(BoxHit.GetActor(), BoxHit.ImpactPoint);
+	}
+	//只添加一次
+	IgnoreActors.AddUnique(BoxHit.GetActor());
+
+	CreateFields(BoxHit.ImpactPoint);
+}
+```
+在蓝图里调用c++版本,
+右键左边函数,调用父版本,
+![alt text](image-37.png)
+勾选右下的`notify break`,做到使所有破碎的物体触发消失事件
+
+### Treasure
+
+创建`Treasure`类继承`Item`并实现对应重叠函数
+
+### Spawning Actors
+
+在某个地方生成某个`Actor`.\
+设置pot忽视`pawn`,设置在pot里面生成的东西无视碰撞\
+
+蓝图做法:
+![alt text](image-38.png)
+
+#### UClass
+
+![alt text](image-39.png)
+
+#### TSubclassOf
+
+只能在某类及其子类中选择
+![alt text](image-40.png)
+
+胶囊体通常用来阻挡东西
+c++:
+```cpp
+
+//Breakable.h
+UPROPERTY(VisibleAnywhere,BlueprintReadWrite)
+class UCapsuleComponent* Capsule;
+
+UPROPERTY(EditAnywhere,Category="Breakable Properties")
+TSubclassOf<class ATreasure> TreasureClass; // Class of the treasure to spawn when broken
+
+//.cpp
+#include "Components/CapsuleComponent.h" // Ensure this header is included to resolve the incomplete type error
+
+ABreakableActor::ABreakableActor()
+{
+	//Dont tick by default
+	PrimaryActorTick.bCanEverTick = false;
+
+	//Create the geometry collision component
+	GeometryCollection = CreateDefaultSubobject<UGeometryCollectionComponent>(TEXT("GeometryCollectionComponent"));
+	//Set the geometry collision component as the root component
+	SetRootComponent(GeometryCollection);
+	//允许重叠事件
+	GeometryCollection->SetGenerateOverlapEvents(true);
+	//忽视相机
+	GeometryCollection->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+	//忽视pawn
+	GeometryCollection->SetCollisionResponseToChannel(ECC_Pawn, ECR_Ignore);
+
+	// Create and attach the capsule component
+	Capsule = CreateDefaultSubobject<UCapsuleComponent>(TEXT("Capsule"));
+	Capsule->SetupAttachment(GetRootComponent());
+	Capsule->SetCollisionResponseToAllChannels(ECR_Ignore);
+	Capsule->SetCollisionResponseToChannel(ECC_Pawn, ECR_Block);
+}
+
+void ABreakableActor::GetHit_Implementation(const FVector& ImpactPoint)  
+{  
+    UWorld* World = GetWorld();  
+    if (World && TreasureClass)  
+    {  
+        FVector Location = GetActorLocation();  
+        Location.Z += 30.f;  
+		
+        //FActorSpawnParameters SpawnParams;  
+        //SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;  
+
+        World->SpawnActor<ATreasure>(TreasureClass, Location, GetActorRotation());  
+    }  
+}
+
+```
 
