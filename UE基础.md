@@ -1289,3 +1289,125 @@ void ABreakableActor::GetHit_Implementation(const FVector& ImpactPoint)
 
 ```
 
+### Different Types of Treasure
+
+以某一个蓝图为父类创建另一个子类蓝图,子类蓝图继承父类的所有属性\
+用`TArray`数组来保存多个`Treasure`
+```cpp
+
+UPROPERTY(EditAnywhere,Category="Breakable Properties")
+
+TArray<TSubclassOf<class ATreasure>> TreasureClasses; // Classes of treasures to spawn when broken
+```
+
+死循环问题:
+![alt text](5e2d2fea56c0e83fd09855e8ec0266a1.png)
+
+特判重叠物体不是`treasure`,给pot加个`IsBroken`属性,似乎是变长数组出了问题
+
+### Niagara System
+
+1. 新建`Niagara System`
+2. 选定发射器创建新系统
+3. 在`Scalability`中选中`self`才可以显示效果
+
+#### Niagara Components
+
+蓝图操作直接添加`Niagara`组件.
+
+c++:添加`Niagara`模块到构建文件中,添加后尝试编译
+```cpp
+
+UPROPERTY(EditAnywhere)
+class UNiagaraComponent* EmbersEffect;
+
+#include "NiagaraComponent.h"
+
+	EmbersEffect = CreateDefaultSubobject<UNiagaraComponent>(TEXT("Embers"));
+	EmbersEffect->SetupAttachment(GetRootComponent());
+
+
+if (EmbersEffect)
+{
+//停用火花特效
+EmbersEffect->Deactivate();
+}
+
+```
+
+## Actor Components
+
+![alt text](image-41.png)
+![alt text](image-42.png)
+
+### 创建组件类
+
+1. 创建`Actor Component`类
+2. 添加属性
+3. 在想要添加该组件的actor上加上该组件
+
+### Widget Components
+
+控件蓝图,添加`Health bar`.`User Interface->Widget Blueprint`,`Widgit`是HUD元素,可以展示在屏幕上\
+创建`WidgetCOMponent`类,添加`UMG`模块
+```cpp
+//Enemy.h
+UPROPERTY(VisibleAnywhere)
+class UWidgetComponent* HealthBarWidget;
+
+//.cpp
+#include "Components/WidgetComponent.h"
+
+HealthBarWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("HealthBar"));
+HealthBarWidget->SetupAttachment(GetRootComponent());
+
+```
+![alt text](image-43.png)
+`Space`调成`Screen`,`WidgetClass` 选择创建的蓝图
+
+### User Widget Class
+
+用c++更改血条,蓝图的父类,创建"User Widget Class`
+```cpp
+//.h
+UPROPERTY(meta = (BindWidget))
+//名字必须和蓝图中绑定的名字一致,而且必须
+//先在蓝图中创建一个ProgressBar控件
+class UProgressBar* HealthBar;
+
+```
+然后在`WBP_HealthBar`里面点击`Class Settings`更改父类,确保控件名一致
+
+### Setting the Health Percent
+
+设置百分比血条,`UserWidget(显示) - WidgetComponent(实现功能),UserWidget(显示)- Controller(实现功能)`
+```cpp
+//HealthBarComponent.h
+	//避免多次类型转换
+	UPROPERTY()
+	class UHealthBar* HealthBarWidget;
+
+//cpp
+void UHealthBarComponent::SetHealthPercent(float Percent)
+{
+	if(HealthBarWidget==nullptr)
+	HealthBarWidget = Cast<UHealthBar>(GetUserWidgetObject());
+	if (HealthBarWidget&& HealthBarWidget->HealthBar)
+	{
+		HealthBarWidget->HealthBar->SetPercent(Percent);
+	}
+}
+
+//Enemy.h
+//由UWidget改成现在
+UPROPERTY(VisibleAnywhere)
+class UHealthBarComponent* HealthBarWidget;
+
+//.cpp
+#include "HUD/HealthBarComponent.h"
+
+HealthBarWidget = CreateDefaultSubobject<UHealthBarComponent>(TEXT("HealthBar"));
+HealthBarWidget->SetupAttachment(GetRootComponent());
+
+```
+
