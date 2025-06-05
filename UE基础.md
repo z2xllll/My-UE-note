@@ -935,7 +935,7 @@ AEnemy::AEnemy()
 
 ### Root Motion Animation
 根运动只有在角色骨骼有`root`的情况下使用,但可以通过`Blender`和`Mixamo Converter`插件来给他们加根骨头\
-只要从`mixamo`下载的同一个角色的动画里有一个带皮肤,皮肤带网格,其他都可以不带\
+只要从`mixamo`下载的同一个角色的动画里有一个带皮肤,皮肤带网格,其他都可以不带,blender使用时得有一个皮肤\
 `Blender`是一个网格编辑软件,装好插件后可以将无根骨骼动画转换成有根骨骼动画
 ![alt text](image-27.png)
 选项根据这个来\
@@ -1409,5 +1409,93 @@ class UHealthBarComponent* HealthBarWidget;
 HealthBarWidget = CreateDefaultSubobject<UHealthBarComponent>(TEXT("HealthBar"));
 HealthBarWidget->SetupAttachment(GetRootComponent());
 
+if (HealthBarWidget)
+{
+	HealthBarWidget->SetHealthPercent(0.5f);
+}
+
 ```
 
+### Damage
+
+![alt text](image-44.png)
+
+1. 归因系统: EventInstigator 用于统计击杀、经验值分配
+2. 伤害计算: DamageCauser 可能影响伤害类型、抗性计算
+3. AI反应: AI可能对不同的 DamageCauser 有不同反应
+4. 游戏逻辑: 某些效果可能只对特定类型的 DamageCauser 生效
+```cpp
+//Enemy.h
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
+
+//cpp
+float AEnemy::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser)
+{
+	if (Attributes)
+	{
+		Attributes->ReveiveDamage(DamageAmount);
+		if (HealthBarWidget)
+		{
+			HealthBarWidget->SetHealthPercent(Attributes->GetHealthPercent());
+		}
+	}
+	return DamageAmount;
+}
+
+//Weapon.cpp
+if(HitActor->IsA<AEnemy>())
+{
+	//如果是敌人,应用伤害
+	UGameplayStatics::ApplyDamage(
+		HitActor,
+		Damage,
+		GetInstigator()->GetController(),
+		this,
+		UDamageType::StaticClass()
+	);
+}
+
+```
+两个函数结合使用
+
+### 自定义血条
+
+在`Style`和`Appearance`栏里可以进行自定义
+
+### Enemy Death
+
+死亡动画要经过'Blender`加上根骨骼,动画蓝图访问蓝图变量需要\
+先获取`Pawn`然后获取对应变量\
+![alt text](image-45.png)
+多线程:
+![alt text](image-46.png)
+把蒙太奇的`Blend time`调成0.
+
+### Polishing Enemy Death
+
+1. 取消死后碰撞
+`GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision); //禁用碰撞`
+2. 清理敌人尸体
+`SetLifeSpan(5.f); //设置生命期, 5秒后销毁`
+3. 隐藏血条`HealthBarWidget->SetVisibility(false); //隐藏血条`
+
+血条显示Plus:根据距离决定是否显示
+先创建一个`CombatTarget`变量,和战斗半径变量
+```cpp
+const double DistanceToTarget = FVector::Dist(GetActorLocation(), CombatTarget->GetActorLocation());
+```
+每一帧更新距离做出相应反应
+
+### Enemy moving
+
+1. 先用`Nav Mesh Bounds Volume`覆盖移动的范围,同时按p键显示导航网格
+2. ![alt text](image-47.png)
+3. `targetpoint`连到`move to actor`函数上可以追踪实体,可以先创Actor对象,在detail里面选择在实例修改,然后就可以在世界里选中Actor.或者也可以打开`Place Actors Panel`手动设置目标点
+4. 追踪玩家![alt text](image-48.png)
+5. `show navigation`命令可以在游戏里显示导航网格
+6. 让导航网格实时更新![alt text](image-49.png)
+7. 网格大小`cell size`更改,`cell high`决定可上高度
+
+### Blendspaces
+
+不同动画之间的混合
