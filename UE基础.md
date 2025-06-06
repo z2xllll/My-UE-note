@@ -1499,3 +1499,116 @@ const double DistanceToTarget = FVector::Dist(GetActorLocation(), CombatTarget->
 ### Blendspaces
 
 不同动画之间的混合
+![alt text](image-50.png)
+
+### Patrol Targets 
+
+敌人的巡逻目标
+
+1. 导入`AIModule`,引用`AIController.h`,`Navigation/PathFollowingComponent.h`
+2. 调试追踪路径![alt text](image-51.png)
+3. 设置多个目标点作为巡逻目标
+4. 用数组存下目标点在`Tick`函数里进行巡逻
+
+### Timer Handle
+
+设置巡逻等待时间
+```cpp
+	FTimerHandle PatrolTimer;
+	void PatrolTimerFinished();
+
+GetWorldTimerManager().SetTimer(
+	PatrolTimer,
+	this,
+	&AEnemy::PatrolTimerFinished,//回调函数
+	5.f
+); //设置巡逻计时器
+```
+
+### Pawn Sensing Component 
+
+角色感知组件,敌人识别角色并追击
+蓝图:添加`PawnSensingComponent`调整视野
+![alt text](image-52.png)
+```cpp
+
+//.h
+UPROPERTY(VisibleAnywhere)
+class UPawnSensingComponent* PawnSensing;
+
+	UFUNCTION()
+	void PawnSeen(APawn* SeenPawn); // Called when the PawnSensing component detects a pawn
+
+//.cpp
+#include "Perception/PawnSensingComponent.h"
+
+	PawnSensing = CreateDefaultSubobject<UPawnSensingComponent>(TEXT("PawnSensing"));
+	PawnSensing->SetPeripheralVisionAngle(45.f); //设置感知角度为90度
+	PawnSensing->SightRadius = 4000.f; //设置感知半径为1000单位
+
+if (PawnSensing)
+{
+	//设置感知事件
+	PawnSensing->OnSeePawn.AddDynamic(this, &AEnemy::PawnSeen); //绑定感知事件
+}
+
+```
+在`PawnSeen`中减少`cast`开销
+```cpp
+void ASlashCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+	
+	Tags.Add(FName("SlashCharacter"));//添加标签,方便检测角色类型
+}
+
+void AEnemy::PawnSeen(APawn* SeenPawn)
+{
+	if (EnemyState == EEnemyState::EES_Chasing) return; //如果敌人状态为追击, 则不处理感知事件
+	if (SeenPawn->ActorHasTag(FName("SlashCharacter")))
+	{
+		EnemyState = EEnemyState::EES_Chasing; //设置敌人状态为追击
+		GetWorldTimerManager().ClearTimer(PatrolTimer); //清除巡逻计时器
+		CombatTarget = SeenPawn; //设置战斗目标为被感知的角色
+		MoveToTarget(CombatTarget); //移动到战斗目标
+	}
+}
+```
+difficult:追击结束后敌人不返回巡逻点,解决
+```cpp
+if (EnemyController && EnemyState == EEnemyState::EES_Patrolling)
+{
+	if (PatrolTargets.Num() == 0) return;
+
+	// 检查是否需要选择新的巡逻目标
+	if (!PatrolTarget || !GetWorldTimerManager().IsTimerActive(PatrolTimer))
+	{
+		const int32 TargetIndex = FMath::RandRange(0, PatrolTargets.Num() - 1);
+		PatrolTarget = PatrolTargets[TargetIndex];
+		UE_LOG(LogTemp, Warning, TEXT("New Patrol Target: %s"), *PatrolTarget->GetName());
+
+		GetWorldTimerManager().SetTimer(
+			PatrolTimer,
+			this,
+			&AEnemy::PatrolTimerFinished,
+			5.f
+		);
+
+	}
+}
+`!(EnemyController->GetMoveStatus() == EPathFollowingStatus::Moving)`
+
+```
+
+### Weapon Alterations
+
+右键武器蓝图复制,用`Blender`调整网格原点,使得武器资产能够适配原有插槽
+1. 右键武器网格图,`Asset Actions`->`Export`
+2. 选项![alt text](image-53.png)
+3. 打开`Blender`,`File->Import->FBX`
+4. 进入`Edit Mode`模式
+5. 按r进入旋转,按xyz控制选择绕某轴,+数字旋转度数
+6. 按g抓取,按xyz控制在某轴上移动
+7. 导出fbx文件
+8. 导入时![alt text](image-54.png)
+9. 导入对应材质
