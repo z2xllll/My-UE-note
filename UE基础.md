@@ -1612,3 +1612,107 @@ if (EnemyController && EnemyState == EEnemyState::EES_Patrolling)
 7. 导出fbx文件
 8. 导入时![alt text](image-54.png)
 9. 导入对应材质
+
+## Inheritance
+
+### Base Character class
+![alt text](image-55.png)
+
+玩家类和敌人类继承`BaseCharacter`类
+1. 作用完全相同的,直接从父类继承
+2. 公共有些不同的就虚函数重写
+
+```cpp
+
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "Interfaces/HitInterface.h"
+#include "BaseCharacter.generated.h"
+
+class UAnimMontage;
+
+UCLASS()
+class SLASH_API ABaseCharacter : public ACharacter, public IHitInterface
+{
+	GENERATED_BODY()
+
+public:
+	ABaseCharacter();
+
+	virtual void Tick(float DeltaTime) override;
+
+	UFUNCTION(BlueprintCallable)
+	void SetWeaponCollisionEnabled(ECollisionEnabled::Type CollisionEnabled);
+protected:
+	virtual void BeginPlay() override;
+	virtual void Attack();
+	virtual bool CanAttack();
+	UFUNCTION(BlueprintCallable)
+	virtual void AttackEnd();
+
+	/*
+	* Play Montage functions
+	*/
+	void PlayHitReactMontage(const FName& SectionName);
+
+	virtual void Die();
+
+	/*Play Montage*/
+
+	virtual void PlayAttackMontage();
+
+	void DirectionalHitReact(const FVector& ImpactPoint);
+
+	/*
+	* Animation Montages
+	*/
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+	UAnimMontage* AttackMontage;
+
+	UPROPERTY(VisibleAnywhere, Category = "Weapon")
+	class AWeapon* EquippedWeapon;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+	UAnimMontage* HitReactMontage;
+
+	UPROPERTY(VisibleAnywhere)
+	class UAttributeComponent* Attributes;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Montages")
+	UAnimMontage* DeathMontage;
+
+	UPROPERTY(EditAnywhere, Category = "Sounds")
+	USoundBase* HitSound;
+
+	UPROPERTY(EditAnywhere, Category = "VisualEffects")
+	UParticleSystem* HitParticles;
+};
+```
+
+### Construction Scipt
+
+将武器网格固定至插槽
+![alt text](image-56.png)
+游戏开始时生成武器在敌人手上
+```cpp
+//.h
+	UPROPERTY(EditAnywhere)
+	TSubclassOf<class AWeapon> WeaponClass;
+//cpp
+UWorld* World = GetWorld();
+if (World && WeaponClass)
+{
+	AWeapon* DefaultWeapon = World->SpawnActor<AWeapon>(WeaponClass);
+	DefaultWeapon->Equip(GetMesh(), FName("RightHandSocket"), this, this);
+	EquippedWeapon = DefaultWeapon;
+}
+```
+
+加关键帧记得要选中骨骼而不是插槽才能加
+
+### 重构敌人类代码
+
+敌人状态加入死亡,用新状态判断动画转换规则
+![alt text](image-57.png)
