@@ -1714,5 +1714,35 @@ if (World && WeaponClass)
 
 ### 重构敌人类代码
 
-敌人状态加入死亡,用新状态判断动画转换规则
+敌人状态加入死亡,用新状态判断动画转换规则\
+整理判断敌人状态的代码
 ![alt text](image-57.png)
+
+### 添加Attack Timer
+
+```cpp
+GetWorldTimerManager().SetTimer(
+	AttackTimer,
+	this,
+	&AEnemy::Attack,
+	AttackWaitTime//攻击计时器, 1.5秒后触发
+);
+```
+
+### 重构动画蒙太奇部分
+
+旧版:蒙太奇部分硬编码导致可扩展性低\
+新版:采用`TArray<FName>`存储片段名称,同时让蓝图可编辑,使得可扩展性增强
+
+### Hitting the Character
+
+将角色碰撞预设改为`World Dynamic`,因为之前设置的武器只对`World Dynamic`生效,按q使蓝图水平对齐,
+
+```cpp
+	GetMesh()->SetCollisionObjectType(ECC_WorldDynamic);//设置角色网格碰撞类型
+	GetMesh()->SetCollisionResponseToAllChannels(ECR_Ignore);//忽略所有碰撞
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECR_Block);//设置可见性通道为阻挡
+	GetMesh()->SetCollisionResponseToChannel(ECollisionChannel::ECC_WorldDynamic, ECR_Overlap);//设置世界动态通道为重叠
+	//产生重叠事件
+	GetMesh()->SetGenerateOverlapEvents(true);
+```
