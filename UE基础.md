@@ -1746,3 +1746,21 @@ GetWorldTimerManager().SetTimer(
 	//产生重叠事件
 	GetMesh()->SetGenerateOverlapEvents(true);
 ```
+
+### 优化击中反馈动画
+
+由击中点反馈优化为根据敌我相对方向,受击判断中的受击点改为攻击者位置
+
+### montion Warping
+运动扭曲,使能够在播放蒙太奇动画时面对接近或移动到目标,必须用根运动动画实现\
+下载跟运动动画后在蓝图里勾选启用跟运动\
+单独创建一个根运动蒙太奇\
+启用`motion warping`插件\
+添加`motion warping`组件\
+蒙太奇里面添加`motion warping`通知状态覆盖根运动发生时的动画\
+在`Details`里面更改`Root Motion Modifier`为`Skew Warp`,并且设置`Warp Target`.`Rotion Type`改为`Facing`朝着目标\
+在基础敌人事件蓝图里更新变形目标,创建自定义事件
+![alt text](image-58.png)
+在根运动蒙太奇里面添加通知\
+在动画蓝图事件里面调用对应通知触发自定义类更新变形目标
+![alt text](image-59.png)
