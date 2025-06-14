@@ -1764,3 +1764,154 @@ GetWorldTimerManager().SetTimer(
 在根运动蒙太奇里面添加通知\
 在动画蓝图事件里面调用对应通知触发自定义类更新变形目标
 ![alt text](image-59.png)
+
+### Fixing Warp Targets
+
+优化并调整传送目标位置,
+```cpp
+FVector AEnemy::GetRotationWarpTarget()
+{
+	if (CombatTarget == nullptr)return FVector();
+	const FVector TargetLocation = CombatTarget->GetActorLocation();
+	const FVector EnemyLocation = GetActorLocation();
+
+	FVector Direction = (TargetLocation - EnemyLocation).GetSafeNormal(); //获取目标方向
+	return TargetLocation - Direction * WarpTargetDistance; //被攻击者位置-方向*距离
+}
+
+FVector AEnemy::GetTranslationWarpTarget()
+{
+	if (CombatTarget)return CombatTarget->GetActorLocation();
+	return FVector();
+}
+```
+两个`Warp Motion`通知分别命名和一个启用平移,一个启用旋转.
+![alt text](image-60.png)
+
+## Add HUD for Player
+
+### 角色状态HUD
+
+蓝图版:
+1. 获取对应纹理文件压缩成用户2D格式
+2. 创建空间蓝图选择`User Interface`
+3. 创建画布,拖动图像
+4. ![alt text](image-61.png)
+5. 打开关卡蓝图,生成控件并展示
+6. ![alt text](image-62.png)
+7. 添加进度条
+8. 添加文本,字体资源需自行下载使用.ttf格式
+
+C++:
+1. 继承`User widget`类
+2. 在新建类中分别加入对应组件变量,名称和蓝图中的一致
+3. 引入对应头文件实现对应Setter
+```cpp
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "HUD/SlashOverlay.h"
+#include "Components/ProgressBar.h"
+#include "Components/TextBlock.h"
+
+void USlashOverlay::SetStaminaPercent(float Percent)
+{
+	if (StaminaBar)
+	{
+		StaminaBar->SetPercent(Percent);
+	}
+}
+
+void USlashOverlay::SetGoldAmount(int32 Amount)
+{
+	if(GoldText)
+	{
+		GoldText->SetText(FText::AsNumber(Amount));
+	}
+}
+
+void USlashOverlay::SetSoulAmount(int32 Amount)
+{
+	if(SoulText)
+	{
+		SoulText->SetText(FText::AsNumber(Amount));
+	}
+}
+
+void USlashOverlay::SetHealthPercent(float Percent)
+{
+	if (HealthBar)
+	{
+		HealthBar->SetPercent(Percent);
+	}
+}
+
+
+
+```
+
+4. 更改蓝图控件父类为刚建的c++类
+
+### 创建HUD类并设置为默认游戏模式 
+
+1. 新建HUD蓝图类
+2. 添加逻辑后保存并在游戏模式中设置
+
+也可用新建c++类实现蓝图逻辑并设置为蓝图类的父类
+
+```cpp
+//.h
+UCLASS()
+class SLASH_API ASlashHUD : public AHUD
+{
+	GENERATED_BODY()
+protected:
+	virtual void BeginPlay() override;
+private:
+	UPROPERTY(EditDefaultsOnly, Category = Slash)
+	TSubclassOf<class USlashOverlay> SlashOverlayClass;
+};
+
+//.cpp
+#include "HUD/SlashHUD.h"
+#include "HUD/SlashOverlay.h"
+
+void ASlashHUD::BeginPlay()
+{
+	Super::BeginPlay();
+	UWorld* World = GetWorld();
+	if (World)
+	{
+		APlayerController* PlayerController = World->GetFirstPlayerController();
+		if (PlayerController)
+		{
+			USlashOverlay* SlashOverlay = CreateWidget<USlashOverlay>(PlayerController, SlashOverlayClass);
+			SlashOverlay->AddToViewport();
+		}
+	}
+}
+```
+
+### Setting the HUD from c++
+
+//更改游戏模式为SlashHUD
+```cpp
+void ASlashCharacter::InitializeSlashOverlay(APlayerController* PlayerController)
+{
+	if (PlayerController)
+	{
+		ASlashHUD* SlashHUD = Cast<ASlashHUD>(PlayerController->GetHUD());
+		if (SlashHUD)
+		{
+			SlashOverlay = SlashHUD->GetSlashOverlay();
+			if (SlashOverlay && Attributes)
+			{
+				SlashOverlay->SetHealthPercent(Attributes->GetHealthPercent());//设置血条百分比
+				SlashOverlay->SetStaminaPercent(1.f);//设置耐力条百分比
+				SlashOverlay->SetGoldAmount(0.f);//设置金币数量
+				SlashOverlay->SetSoulAmount(0.f);//设置灵魂数量
+			}
+		}
+	}
+}
+```
