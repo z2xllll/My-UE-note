@@ -201,7 +201,7 @@ T Avg(T a,T b)
 {
     return (a+b)>>1;
 }
-int result = <Avg<int>(1,2);
+int result = Avg<int>(1,2);
 ```
 
 ### Component
@@ -1464,8 +1464,8 @@ if(HitActor->IsA<AEnemy>())
 
 ### Enemy Death
 
-死亡动画要经过'Blender`加上根骨骼,动画蓝图访问蓝图变量需要\
-先获取`Pawn`然后获取对应变量\
+死亡动画要经过`Blender`加上根骨骼,动画蓝图访问蓝图变量需要\
+先获取`Pawn`然后获取对应变量
 ![alt text](image-45.png)
 多线程:
 ![alt text](image-46.png)
@@ -1915,3 +1915,17 @@ void ASlashCharacter::InitializeSlashOverlay(APlayerController* PlayerController
 	}
 }
 ```
+
+### Dodge
+
+mixamo下载有皮肤网格,在`Blender`中添加根骨后创建ik重定向,记得选中`Global Scale`	![alt text](image-63.png),`retarget root`还是hips.`mixiamo`里面的动画是通用的,对里面各种模型角色来说
+
+## Animation Blueprint Template
+
+### 模板动画蓝图类
+
+1. 创建动画蓝图,选择模板
+2. 里面进行和普通动画蓝图一样的操作
+
+流程图:
+![alt text](image-64.png)
